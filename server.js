@@ -2,7 +2,7 @@ const express = require('express');
 const cors = require('cors');
 const { v4: uuidv4 } = require('uuid');
 const path = require('path');
-const fetch = require('node-fetch');
+const fetch = require('node-fetch'); // <-- THIS IS THE MISSING MODULE
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -134,9 +134,9 @@ app.post('/api/generate-key', async (req, res) => {
     console.log(`New ${plan} key generated: ${key}`);
 
     // Replace this URL with your actual Discord Webhook URL
-    const webhookUrl = 'https://discord.com/api/webhooks/1403404977103306812/49AMtl6w4djpAzvprXNViZn7noOglBafoZwz8ITHryJOqye-tGfxx2qAok1rxfsGVJk7';
+    const webhookUrl = 'https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN';
     const embed = {
-        title: "New Key Generated",
+        title: "New Key Generated (Owner Panel)",
         color: 0x7b2cbf,
         fields: [
             {
@@ -175,8 +175,13 @@ app.post('/api/generate-key', async (req, res) => {
     }
 });
 
-app.post('/api/free-key', (req, res) => {
+// --- CORRECTED FREE KEY ENDPOINT ---
+app.post('/api/free-key', async (req, res) => {
     const { userId } = req.body;
+    if (!userId) {
+        return res.status(400).json({ error: 'User ID is required.' });
+    }
+
     if (freeKeysGiven.has(userId)) {
         return res.status(403).json({ error: 'You have already received your one-time free key.' });
     }
@@ -186,7 +191,47 @@ app.post('/api/free-key', (req, res) => {
     keys[key] = { expiresAt, plan: '1-month', isFree: true };
     freeKeysGiven.add(userId);
     console.log(`New FREE 1-month key generated for user ${userId}: ${key}`);
-    res.status(200).json({ key, expiresAt, plan: '1-month' });
+
+    // Replace this URL with your actual Discord Webhook URL
+    const webhookUrl = 'https://discord.com/api/webhooks/YOUR_WEBHOOK_ID/YOUR_WEBHOOK_TOKEN';
+    const embed = {
+        title: "New FREE Key Generated",
+        color: 0x2e8b57, // A green color for free keys
+        fields: [
+            {
+                name: "User ID",
+                value: userId,
+                inline: true
+            },
+            {
+                name: "Key",
+                value: `\`\`\`${key}\`\`\``,
+                inline: false
+            },
+            {
+                name: "Expires At",
+                value: new Date(expiresAt).toLocaleString(),
+                inline: false
+            }
+        ],
+        timestamp: new Date()
+    };
+
+    try {
+        await fetch(webhookUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                embeds: [embed]
+            })
+        });
+        res.status(200).json({ key, expiresAt, plan: '1-month' });
+    } catch (error) {
+        console.error("Failed to send webhook message:", error);
+        res.status(500).json({ error: 'Failed to generate key and send to webhook.' });
+    }
 });
 
 app.post('/api/check-key', (req, res) => {
